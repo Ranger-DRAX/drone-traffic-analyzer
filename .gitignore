@@ -1,0 +1,24 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+__pycache__/
+*.pyc
+.env
+.env.local
+.venv/
+venv/
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+dist/
+build/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.pt
+backend/storage/uploads/*
+!backend/storage/uploads/.gitkeep
+backend/storage/results/*
+!backend/storage/results/.gitkeep
+.DS_Store
