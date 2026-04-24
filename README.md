@@ -106,17 +106,40 @@ See [frontend/README.md](frontend/README.md) for the Next.js client setup and `.
 
 ## How to Run Locally
 
-We have provided simple Windows scripts to make running the project as easy as possible.
+Use two terminals: one for frontend and one for backend.
 
-**1. First-time Setup:**
-Double-click `setup.bat` in the project root. This will automatically install Python dependencies for the backend, Node modules for the frontend, and configure the `.env` files.
+### 1. Frontend terminal (run from frontend folder only)
 
-**2. Running the Application:**
-Double-click `start.bat` in the project root. This will open two new command windows:
-- The Backend FastAPI server running at `http://localhost:8000`
-- The Frontend Next.js app running at `http://localhost:3000`
+```powershell
+cd "K:\Neural Networks\Computer Vision - ANTS assesment\proj\smart-drone-traffic-analyzer\frontend"
+npm install
+npm run dev
+```
 
-Once started, simply open `http://localhost:3000` in your web browser.
+Frontend URL:
+
+```text
+http://localhost:3000
+```
+
+### 2. Backend terminal (run from project root)
+
+```powershell
+cd "K:\Neural Networks\Computer Vision - ANTS assesment\proj\smart-drone-traffic-analyzer"
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Backend API URL:
+
+```text
+http://localhost:8000
+```
+
+Once both servers are running, open `http://localhost:3000` in your browser.
 
 ## Demo and Testing Guidance
 
@@ -127,7 +150,7 @@ Once started, simply open `http://localhost:3000` in your web browser.
 
 ## Low-Configuration Optimization Choices
 
-- `YOLO26n` is the default model to reduce load.
+- `YOLO26m` is the default model to reduce load.
 - The app uses background processing so the UI remains responsive.
 - The job store is in-memory to avoid database overhead for the assessment.
 - The backend falls back to CPU when CUDA is not available.
