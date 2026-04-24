@@ -32,6 +32,73 @@ The repository is split into a backend service and a frontend client.
 - `backend/storage/uploads/{job_id}/` stores the uploaded MP4.
 - `backend/storage/results/{job_id}/` stores the annotated MP4, CSV report, and summary JSON.
 
+## Project Structure
+
+```text
+smart-drone-traffic-analyzer/
+│
+├── backend/
+│   ├── app/
+│   │   ├── __init__.py 
+│   │   ├── config.py                # Environment/configuration settings
+│   │   ├── main.py                  # FastAPI application entry point
+│   │   │
+│   │   ├── routes/
+│   │   │   ├── __init__.py
+│   │   │   └── jobs.py              # REST API endpoints for job processing and status
+│   │   │
+│   │   ├── schemas/
+│   │   │   ├── __init__.py
+│   │   │   └── job.py               # API response/request schemas
+│   │   │
+│   │   └── services/
+│   │       ├── __init__.py
+│   │       ├── file_utils.py        # Upload/result file path management
+│   │       ├── job_store.py         # In-memory job store and status handling
+│   │       ├── report_generator.py  # CSV/JSON report generation
+│   │       ├── video_processor.py   # Main CV pipeline: detection, tracking, counting
+│   │       └── visualizer.py        # Video annotation and bounding box drawing
+│   │
+│   ├── models/
+│   │   └── yolo26m.pt               # Local YOLO model weights
+│   │
+│   ├── storage/
+│   │   ├── results/                 # Job folders with annotated videos, CSVs, and JSONs
+│   │   └── uploads/                 # Job folders with uploaded input videos
+│   │
+│   ├── README.md                    # Backend setup and API details
+│   └── requirements.txt             # Python backend dependencies
+│
+├── frontend/
+│   ├── app/
+│   │   ├── globals.css              # Global styles
+│   │   ├── layout.tsx               # Next.js root layout
+│   │   └── page.tsx                 # Main upload and result display page
+│   │
+│   ├── components/
+│   │   ├── ErrorAlert.tsx           # Error handling/display UI
+│   │   ├── ProgressBar.tsx          # Processing/loading status display
+│   │   ├── SummaryCard.tsx          # Total count and class breakdown display
+│   │   ├── UploadBox.tsx            # MP4 upload UI
+│   │   └── VideoResult.tsx          # Annotated video preview
+│   │
+│   ├── lib/
+│   │   └── api.ts                   # Frontend API helper functions
+│   │
+│   ├── eslint.config.mjs            # ESLint configuration
+│   ├── next-env.d.ts                # Next.js TypeScript declarations
+│   ├── next.config.ts               # Next.js configuration
+│   ├── package.json                 # Frontend dependencies and scripts
+│   ├── postcss.config.mjs           # PostCSS configuration
+│   ├── README.md                    # Frontend setup details
+│   └── tsconfig.json                # TypeScript configuration
+│
+├── sample_videos/                   # Provided sample videos for processing
+│
+├── ANTS_Assesment.ipynb             # Initial Assessment/Prototype Notebook
+└── README.md                        # Main project documentation   
+``` 
+
 ## System Workflow
 
 1. The user selects a `.mp4` drone video.
@@ -55,7 +122,7 @@ The backend uses the same core behavior from the notebook prototype:
 
 ### YOLO26m Model Choice
 
-The default model is `YOLO_MODEL_PATH=yolo26m.pt` because it is lighter and more suitable for low-resource machines. The backend also supports a local weight file at `backend/models/yolo26m.pt`, and the path can be overridden with an environment variable.
+The default model is `YOLO_MODEL_PATH=yolo26m.pt` because it provides stronger detection accuracy than smaller variants, which is useful for challenging drone footage and cases where trains or large vehicles may be confused with buses. This comes with higher compute cost, so the model path can be overridden with an environment variable. For lower-resource machines, `yolo26s.pt` or `yolo26n.pt` can be used instead.
 
 ### ByteTrack Tracking Methodology
 
@@ -111,7 +178,7 @@ Use two terminals: one for frontend and one for backend.
 ### 1. Frontend terminal (run from frontend folder only)
 
 ```powershell
-cd "K:\Neural Networks\Computer Vision - ANTS assesment\proj\smart-drone-traffic-analyzer\frontend"
+cd "smart-drone-traffic-analyzer\frontend"
 npm install
 npm run dev
 ```
@@ -125,12 +192,12 @@ http://localhost:3000
 ### 2. Backend terminal (run from project root)
 
 ```powershell
-cd "K:\Neural Networks\Computer Vision - ANTS assesment\proj\smart-drone-traffic-analyzer"
+cd "smart-drone-traffic-analyzer"
 cd backend
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Backend API URL:
@@ -141,6 +208,19 @@ http://localhost:8000
 
 Once both servers are running, open `http://localhost:3000` in your browser.
 
+### If you see `No module named 'cv2'`
+
+This means the backend is running under a Python environment that does not have OpenCV installed. Fix it from the `backend` folder:
+
+```powershell
+.venv\Scripts\activate
+python -m pip install -r requirements.txt
+python -c "import cv2; print(cv2.__version__)"
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+If the import check fails, reinstall `opencv-python` in that same venv before starting the server again.
+
 ## Demo and Testing Guidance
 
 - Use a short 30-60 second clip for demo and smoke testing.
@@ -150,7 +230,7 @@ Once both servers are running, open `http://localhost:3000` in your browser.
 
 ## Low-Configuration Optimization Choices
 
-- `YOLO26m` is the default model to reduce load.
+- - The model path is configurable. `YOLO26m` is used for better accuracy, while smaller variants such as `YOLO26s` or `YOLO26n` can be selected for faster processing on lower-resource machines.
 - The app uses background processing so the UI remains responsive.
 - The job store is in-memory to avoid database overhead for the assessment.
 - The backend falls back to CPU when CUDA is not available.
@@ -177,11 +257,12 @@ Once both servers are running, open `http://localhost:3000` in your browser.
 - Store progress history for richer job timelines.
 - Expand the frontend with job history and side-by-side comparison views.
 
-## Demo Recording Guide
+## Evaluation Alignment
 
-1. Launch the backend and frontend locally.
-2. Open the frontend and upload a short MP4 sample.
-3. Show the loading/progress state while processing runs.
-4. Show the completed summary and the annotated video playback.
-5. Download the CSV report and mention where the files are stored under `backend/storage/results/{job_id}/`.
+This project was designed around the assessment criteria:
+
+- Pipeline & Architecture: Decoupled Next.js frontend and FastAPI backend, REST APIs, background video processing, YOLO detection, ByteTrack tracking, and CSV/JSON reporting.
+- Problem Solving & Logic: Unique ByteTrack IDs are used to prevent double-counting, and a bus-to-train correction heuristic handles ambiguous elongated objects in drone footage.
+- Code Quality & Documentation: The repository is separated into backend and frontend modules with setup instructions and documented assumptions.
+- User Experience: The frontend supports MP4 upload, progress polling, result preview, summary display, and CSV download.
 

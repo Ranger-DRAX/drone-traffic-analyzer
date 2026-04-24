@@ -14,16 +14,31 @@ pip install -r requirements.txt
 
 ## Run
 
-Start the API server with:
+Start the API server with the PowerShell launcher:
+
+```powershell
+.\start-backend.ps1
+```
+
+If you prefer to run the commands manually, use the active virtual environment Python:
 
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Open Swagger UI at:
 
 ```text
 http://localhost:8000/docs
+```
+
+If you see `No module named 'cv2'`, recheck that the virtual environment is active and reinstall the backend dependencies in that same environment:
+
+```bash
+.venv\Scripts\activate
+python -m pip install -r requirements.txt
+python -c "import cv2; print(cv2.__version__)"
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ## Upload Test
