@@ -1,0 +1,12 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env
+storage
+test.mp4
+test.webm
+openh264-1.8.0-win64.dll

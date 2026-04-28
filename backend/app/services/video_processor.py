@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib
+import shutil
+import subprocess
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -16,7 +18,7 @@ from app.config import (
     IMAGE_SIZE,
     IOU_THRESHOLD,
     MODELS_DIR,
-    RESULT_DIR,
+    OUTPUT_VIDEO_CODECS,
     VEHICLE_CLASS_IDS,
     YOLO_MODEL_PATH,
 )
@@ -46,15 +48,13 @@ def _resolve_model_path() -> Path:
                 BASE_DIR.parent / raw_value,
                 MODELS_DIR / raw_value,
                 MODELS_DIR / Path(raw_value).name,
-                RESULT_DIR / raw_value,
-                RESULT_DIR / Path(raw_value).name,
                 Path.cwd() / raw_value,
             ]
         )
 
     for candidate in candidate_names:
         if candidate.exists():
-            return candidate
+            return candidate.resolve()
 
     raise FileNotFoundError(
         "YOLO model file not found. Set YOLO_MODEL_PATH to a valid .pt file or place "
@@ -137,6 +137,131 @@ def _draw_counting_line(frame, cv2, line_y: int) -> None:
     )
 
 
+def _create_video_writer(cv2, output_video_path: str, fps: float, width: int, height: int):
+    if not OUTPUT_VIDEO_CODECS:
+        raise RuntimeError(
+            "No output video codecs configured. Set OUTPUT_VIDEO_CODECS to at least one codec."
+        )
+
+    attempted_codecs: list[str] = []
+    primary_codec = OUTPUT_VIDEO_CODECS[0]
+
+    for codec in OUTPUT_VIDEO_CODECS:
+        attempted_codecs.append(codec)
+        writer = cv2.VideoWriter(
+            str(output_video_path),
+            cv2.VideoWriter_fourcc(*codec),
+            fps if fps > 0 else 30.0,
+            (width, height),
+        )
+
+        if writer.isOpened():
+            if codec != primary_codec:
+                print(
+                    "Primary video codec unavailable. "
+                    f"Falling back to {codec} for {output_video_path}."
+                )
+            return writer, codec
+
+        writer.release()
+
+    tried = ", ".join(attempted_codecs) or "<none>"
+    raise RuntimeError(
+        "Could not create output video writer. "
+        f"Tried codecs: {tried}. Output path: {output_video_path}"
+    )
+
+
+def _replace_output_file(source_path: Path, target_path: Path) -> None:
+    ensure_dir(target_path.parent)
+
+    if target_path.exists():
+        target_path.unlink()
+
+    source_path.replace(target_path)
+
+
+def _transcode_video_for_web(source_path: Path, target_path: Path) -> None:
+    ffmpeg_path = shutil.which("ffmpeg")
+    if not ffmpeg_path:
+        raise RuntimeError("ffmpeg is not available for browser-compatible video transcoding.")
+
+    ensure_dir(target_path.parent)
+    target_path.unlink(missing_ok=True)
+
+    command = [
+        ffmpeg_path,
+        "-y",
+        "-loglevel",
+        "error",
+        "-i",
+        str(source_path),
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        str(target_path),
+    ]
+
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if completed.returncode != 0:
+        target_path.unlink(missing_ok=True)
+        error_output = (completed.stderr or completed.stdout or "").strip()
+        raise RuntimeError(
+            "ffmpeg failed to transcode the output video to H.264. "
+            f"Details: {error_output or 'unknown ffmpeg error'}"
+        )
+
+
+def _finalize_output_video(
+    work_output_path: Path,
+    final_output_path: Path,
+    actual_codec: str,
+) -> dict[str, object]:
+    transcoded_for_web = False
+
+    if actual_codec.lower() not in {"avc1", "h264"}:
+        transcoded_output_path = final_output_path.with_name(
+            f"{final_output_path.stem}.transcoded{final_output_path.suffix}"
+        )
+
+        if shutil.which("ffmpeg"):
+            try:
+                _transcode_video_for_web(work_output_path, transcoded_output_path)
+                work_output_path.unlink(missing_ok=True)
+                _replace_output_file(transcoded_output_path, final_output_path)
+                transcoded_for_web = True
+                return {
+                    "output_video_codec": actual_codec,
+                    "output_video_transcoded_for_web": transcoded_for_web,
+                }
+            except Exception as exc:
+                print(
+                    "ffmpeg transcoding failed after OpenCV fallback encoding. "
+                    f"Keeping the original output codec {actual_codec}. Details: {exc}"
+                )
+                transcoded_output_path.unlink(missing_ok=True)
+        else:
+            print(
+                "ffmpeg is unavailable. Keeping the fallback output codec "
+                f"{actual_codec}, which may be less browser-compatible."
+            )
+
+    _replace_output_file(work_output_path, final_output_path)
+    return {
+        "output_video_codec": actual_codec,
+        "output_video_transcoded_for_web": transcoded_for_web,
+    }
+
+
 def process_video(
     input_video_path: str,
     output_video_path: str,
@@ -148,13 +273,18 @@ def process_video(
     torch = _load_module("torch")
 
     input_path = Path(input_video_path)
+    final_output_path = Path(output_video_path)
+    work_output_path = final_output_path.with_name(
+        f"{final_output_path.stem}.work{final_output_path.suffix}"
+    )
 
     if not input_path.exists():
         raise FileNotFoundError(f"Input video not found: {input_video_path}")
 
-    ensure_dir(Path(output_video_path).parent)
+    ensure_dir(final_output_path.parent)
     ensure_dir(Path(output_csv_path).parent)
     ensure_dir(Path(output_summary_path).parent)
+    work_output_path.unlink(missing_ok=True)
 
     reset_track_history()
 
@@ -190,23 +320,12 @@ def process_video(
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
 
-    writer = cv2.VideoWriter(
-        str(output_video_path),
-        cv2.VideoWriter_fourcc(*"avc1"),
-        fps if fps > 0 else 30.0,
-        (width, height),
-    )
-
-    if not writer.isOpened():
-        cap.release()
-        raise RuntimeError(f"Could not create output video writer: {output_video_path}")
-
     # ------------------------------------------------------------------
     # Line-crossing counting state
     # ------------------------------------------------------------------
     # Horizontal counting line at 60% of the frame height.
-    # You can change this value depending on the road position.
-    counting_line_y = int(height * 0.60)
+    # It is initialized from the first decoded frame to avoid bad metadata.
+    counting_line_y: Optional[int] = int(height * 0.60) if height > 0 else None
 
     # Stores the last known side of each track_id.
     track_sides: dict[int, str] = {}
@@ -220,8 +339,16 @@ def process_video(
     report_rows: list[dict[str, object]] = []
 
     frame_number = 0
+    decoded_frame_count = 0
     last_reported_progress = -1
     start_time = time.time()
+    writer = None
+    output_video_codec: Optional[str] = None
+    output_video_metadata: dict[str, object] = {
+        "output_video_codec": None,
+        "output_video_transcoded_for_web": False,
+    }
+    processing_succeeded = False
 
     try:
         while True:
@@ -231,11 +358,28 @@ def process_video(
                 break
 
             frame_number += 1
+            decoded_frame_count += 1
+
+            if writer is None:
+                height, width = frame.shape[:2]
+                counting_line_y = int(height * 0.60)
+                writer, output_video_codec = _create_video_writer(
+                    cv2,
+                    str(work_output_path),
+                    fps,
+                    width,
+                    height,
+                )
+            elif frame.shape[1] != width or frame.shape[0] != height:
+                raise RuntimeError(
+                    "Input video frame dimensions changed during processing, "
+                    f"from {width}x{height} to {frame.shape[1]}x{frame.shape[0]}."
+                )
 
             progress = int((frame_number / total_frames) * 100) if total_frames > 0 else 0
 
             # Draw counting line even on skipped frames.
-            _draw_counting_line(frame, cv2, counting_line_y)
+            _draw_counting_line(frame, cv2, counting_line_y or 0)
 
             if FRAME_SKIP > 1 and frame_number % FRAME_SKIP != 0:
                 draw_summary_overlay(
@@ -304,7 +448,7 @@ def process_video(
                         timestamp_seconds = frame_number / fps if fps > 0 else 0.0
 
                         center_x, center_y = _get_bbox_center(bbox)
-                        current_side = _get_line_side(center_y, counting_line_y)
+                        current_side = _get_line_side(center_y, counting_line_y or 0)
                         previous_side = track_sides.get(track_id)
 
                         if track_id not in track_first_seen:
@@ -389,7 +533,7 @@ def process_video(
                                 "y2": round(y2, 2),
                                 "center_x": center_x,
                                 "center_y": center_y,
-                                "line_y": counting_line_y,
+                                "line_y": counting_line_y or 0,
                                 "side": current_side,
                                 "event": event,
                             }
@@ -417,12 +561,32 @@ def process_video(
                 )
                 last_reported_progress = progress
 
+        if decoded_frame_count == 0:
+            raise RuntimeError(f"No frames could be read from video: {input_video_path}")
+
+        if writer is None or output_video_codec is None:
+            raise RuntimeError(
+                "The output video writer could not be initialized from the decoded frames."
+            )
+
+        processing_succeeded = True
+
     finally:
         cap.release()
-        writer.release()
+        if writer is not None:
+            writer.release()
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+
+        if not processing_succeeded:
+            work_output_path.unlink(missing_ok=True)
+
+    output_video_metadata = _finalize_output_video(
+        work_output_path=work_output_path,
+        final_output_path=final_output_path,
+        actual_codec=output_video_codec,
+    )
 
     processing_duration_seconds = time.time() - start_time
 
@@ -438,10 +602,10 @@ def process_video(
     summary.update(
         {
             "input_video_path": input_video_path,
-            "output_video_path": output_video_path,
+            "output_video_path": str(final_output_path),
             "csv_report_path": output_csv_path,
             "summary_json_path": output_summary_path,
-            "model": str(_resolve_model_path()),
+            "model": str(_resolve_model_path().resolve()),
             "image_size": IMAGE_SIZE,
             "confidence_threshold": CONF_THRESHOLD,
             "iou_threshold": IOU_THRESHOLD,
@@ -459,6 +623,7 @@ def process_video(
                 "aspect_ratio_threshold": BUS_TO_TRAIN_ASPECT_RATIO_THRESHOLD,
                 "min_area": BUS_TO_TRAIN_MIN_AREA,
             },
+            **output_video_metadata,
         }
     )
 

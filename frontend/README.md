@@ -20,6 +20,12 @@ Create a local environment file from `.env.example`:
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api
 ```
 
+For a deployed Hugging Face backend, set:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=https://<space-name>.hf.space/api
+```
+
 ## Local URL
 
 Open the app at:

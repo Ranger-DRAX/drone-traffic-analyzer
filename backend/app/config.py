@@ -27,6 +27,11 @@ IMAGE_SIZE = int(os.getenv("IMAGE_SIZE", "640"))
 CONF_THRESHOLD = float(os.getenv("CONF_THRESHOLD", "0.25"))
 IOU_THRESHOLD = float(os.getenv("IOU_THRESHOLD", "0.45"))
 FRAME_SKIP = int(os.getenv("FRAME_SKIP", "1"))
+OUTPUT_VIDEO_CODECS = tuple(
+    codec.strip()
+    for codec in os.getenv("OUTPUT_VIDEO_CODECS", "avc1,mp4v").split(",")
+    if codec.strip()
+)
 DRAW_TRAILS = os.getenv("DRAW_TRAILS", "true").strip().lower() in {"1", "true", "yes", "on"}
 MAX_TRAIL_LENGTH = int(os.getenv("MAX_TRAIL_LENGTH", "30"))
 ENABLE_BUS_TO_TRAIN_HEURISTIC = os.getenv("ENABLE_BUS_TO_TRAIN_HEURISTIC", "true").strip().lower() in {"1", "true", "yes", "on"}
@@ -49,4 +54,5 @@ def get_env_summary() -> dict[str, str]:
         "RESULT_DIR": str(RESULT_DIR),
         "MODELS_DIR": str(MODELS_DIR),
         "YOLO_MODEL_PATH": YOLO_MODEL_PATH,
+        "OUTPUT_VIDEO_CODECS": ",".join(OUTPUT_VIDEO_CODECS),
     }
