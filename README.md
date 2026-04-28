@@ -247,7 +247,7 @@ If the import check fails, reinstall `opencv-python` in that same venv before st
 - The job store resets when the backend process restarts.
 - The model is not retrained; the pipeline relies on the provided detector weights.
 - Processing time scales with video length and hardware capability.
-- The browser UI assumes the backend is reachable at `http://localhost:8000/api`.
+- The frontend now proxies browser requests through its own `/api` routes. For deployment, set `BACKEND_API_BASE_URL` on the frontend to the backend API base URL, such as `https://<space-name>.hf.space/api`.
 
 ## Future Improvements
 
@@ -265,4 +265,3 @@ This project was designed around the assessment criteria:
 - Problem Solving & Logic: Unique ByteTrack IDs are used to prevent double-counting, and a bus-to-train correction heuristic handles ambiguous elongated objects in drone footage.
 - Code Quality & Documentation: The repository is separated into backend and frontend modules with setup instructions and documented assumptions.
 - User Experience: The frontend supports MP4 upload, progress polling, result preview, summary display, and CSV download.
-

@@ -17,14 +17,16 @@ Run commands from the `frontend` folder. Starting Next.js from the workspace roo
 Create a local environment file from `.env.example`:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api
+BACKEND_API_BASE_URL=http://127.0.0.1:8000/api
 ```
 
 For a deployed Hugging Face backend, set:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=https://<space-name>.hf.space/api
+BACKEND_API_BASE_URL=https://<space-name>.hf.space/api
 ```
+
+The browser now talks to the frontend's own `/api/*` routes, and Next.js proxies those requests to `BACKEND_API_BASE_URL`. That avoids deploy-time `Failed to fetch` errors caused by `localhost`, CORS, or mixed HTTP/HTTPS calls.
 
 ## Local URL
 
