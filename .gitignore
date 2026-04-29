@@ -22,3 +22,4 @@ backend/storage/uploads/*
 backend/storage/results/*
 !backend/storage/results/.gitkeep
 .DS_Store
+huggingface-space-backend/
