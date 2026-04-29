@@ -6,6 +6,13 @@ Smart Drone Traffic Analyzer is a proof-of-concept full-stack computer vision sy
 
 The pipeline was first validated in Google Colab using `ANTS_Assesment.ipynb`. The final application does not depend on Colab and is organized as a production-style FastAPI + Next.js workspace.
 
+## Live Demo & Resources
+
+- **Frontend Application (Vercel):** [https://drone-traffic-analyzer.vercel.app/](https://drone-traffic-analyzer.vercel.app/)
+- **Backend Service (Hugging Face Space):** [Traffic Analyzer Space](https://huggingface.co/spaces/Ranger10017/Traffic_Analyzer)
+- **Video Demonstration:** [Watch on YouTube](https://youtu.be/QvX2rUuziJw)
+
+
 ## Features
 
 - MP4 upload from the browser.
@@ -128,31 +135,6 @@ The default model is `YOLO_MODEL_PATH=yolo26m.pt` because it provides stronger d
 
 ByteTrack is used through Ultralytics tracking. Each detection receives a track ID, and the backend stores the first time that ID appears. After that, repeated observations update `last_seen_frame` and `last_seen_time` without increasing the unique count.
 
-### Double-Counting Prevention
-
-Counting is keyed by unique `track_id`, not by raw detections. If a vehicle is seen across many frames, it still contributes only once to the final vehicle total.
-
-### Bus-to-Train Heuristic
-
-Drone footage can make trains look like buses from above. The backend includes a simple post-processing heuristic: if a detection is labeled as bus, is sufficiently elongated, and has a large enough area, the label is corrected to train for reporting and counting.
-
-## Report Format
-
-The CSV contains these columns:
-
-- `track_id`
-- `vehicle_type`
-- `frame_number`
-- `timestamp_seconds`
-- `confidence`
-- `x1`
-- `y1`
-- `x2`
-- `y2`
-- `event`
-
-The JSON summary includes total count, class breakdown, processing duration, total frames, FPS, counting method, file paths, model metadata, and class correction metadata.
-
 ## API Endpoints
 
 - `GET /api/health`
@@ -170,56 +152,6 @@ See [backend/README.md](backend/README.md) for Python environment setup, depende
 ## Frontend Setup
 
 See [frontend/README.md](frontend/README.md) for the Next.js client setup and `.env.local` configuration.
-
-## How to Run Locally
-
-Use two terminals: one for frontend and one for backend.
-
-### 1. Frontend terminal (run from frontend folder only)
-
-```powershell
-cd "smart-drone-traffic-analyzer\frontend"
-npm install
-npm run dev
-```
-
-Frontend URL:
-
-```text
-http://localhost:3000
-```
-
-### 2. Backend terminal (run from project root)
-
-```powershell
-cd "smart-drone-traffic-analyzer"
-cd backend
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-Backend API URL:
-
-```text
-http://localhost:8000
-```
-
-Once both servers are running, open `http://localhost:3000` in your browser.
-
-### If you see `No module named 'cv2'`
-
-This means the backend is running under a Python environment that does not have OpenCV installed. Fix it from the `backend` folder:
-
-```powershell
-.venv\Scripts\activate
-python -m pip install -r requirements.txt
-python -c "import cv2; print(cv2.__version__)"
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-If the import check fails, reinstall `opencv-python` in that same venv before starting the server again.
 
 ## Demo and Testing Guidance
 
@@ -257,11 +189,3 @@ If the import check fails, reinstall `opencv-python` in that same venv before st
 - Store progress history for richer job timelines.
 - Expand the frontend with job history and side-by-side comparison views.
 
-## Evaluation Alignment
-
-This project was designed around the assessment criteria:
-
-- Pipeline & Architecture: Decoupled Next.js frontend and FastAPI backend, REST APIs, background video processing, YOLO detection, ByteTrack tracking, and CSV/JSON reporting.
-- Problem Solving & Logic: Unique ByteTrack IDs are used to prevent double-counting, and a bus-to-train correction heuristic handles ambiguous elongated objects in drone footage.
-- Code Quality & Documentation: The repository is separated into backend and frontend modules with setup instructions and documented assumptions.
-- User Experience: The frontend supports MP4 upload, progress polling, result preview, summary display, and CSV download.
